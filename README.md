@@ -49,7 +49,11 @@ The basic structure of the file in JSON:
   "apply_stacks": [],
   "mappings": {},
   "stacks": {},
-  "template": "template_name"
+  "template": "template_name",
+  "options": {
+    "tags": {
+    }
+  }
 }
 ~~~
 
@@ -61,6 +65,8 @@ Break down of the keys:
 * `mappings` - Hash of [STACK\_\_]old\_key new\_key to remap after apply\_stack
 * `stacks`- Nested stack information
 * `template` - Template name for this stack
+* `options` - Extra options to set
+ * `tags` - Set stack tags
 
 #### Infrastructure Mode
 
@@ -174,7 +180,8 @@ library. This allows defining the file in a serialization format
 ### Encryption
 
 This callback also supports encrypting stack parameter information for storage. The callback
-adds a `parameters` command for handling encryption/decryption.
+adds a `parameters` command for handling encryption/decryption. Encryption is currently only
+supported when using JSON format parameter files.
 
 #### Configuration
 
@@ -235,7 +242,87 @@ $ sfn parameters lock my-test-stack
 $ sfn parameters unlock my-test-stack
 ~~~
 
+##### Show existing values (as JSON)
+
+~~~
+$ sfn parameters show my-test-stack
+~~~
+
 _NOTE: Full paths can also be used when defining parameters file._
+
+## Extending functionality (Resolvers)
+
+Parameters can be fetched from remote locations using Resolvers. Resolvers
+allow parameter values to be dynamically loaded via customized implementations.
+
+### Resolver usage
+
+Parameter values will be loaded via a resolver when the value of the
+parameter is a hash which includes a `resolver` key. The `resolver` key
+identifies the name of the resolver which should be loaded. For example:
+
+~~~json
+{
+  "parameters": {
+    "stack_creator": {
+      "resolver": "my_resolver",
+      "custom_key": "custom_value"
+    }
+  }
+}
+~~~
+
+This will create an instance of the `MyResolver` class and will then
+call the `MyResolver#resolve` with the value `{"custom_key" => "custom_value"}`.
+
+If the value to resolve is not a complex value, the configuration can
+be reduced to a single key/value pair where the key is the name of the
+resolver, and the value is the value to be resolved. This would look like:
+
+~~~json
+{
+  "parameters": {
+    "stack_creator": {
+      "my_resolver": "custom_value"
+    }
+  }
+}
+~~~
+
+This will create an instance of the `MyResolver` class and will then
+call the `MyResolver#resolve` with the value `"custom_value"`.
+
+### Resolver implementation
+
+New resolvers can be created by subclassing the `SfnParameters::Resolver`
+class and implementing a `#resolve` method. An optional `#setup` method
+is available for setting up the instance. This is called during instance
+creation and has the entire sfn configuration available via the `#config`
+method.
+
+~~~ruby
+require "sfn-parameters"
+
+class MyResolver < SfnParameters::Resolver
+  def setup
+    # any custom setup
+  end
+
+  def resolve(value)
+    if value["custom_key"] == "custom_value"
+      "spox"
+    else
+      "unknown"
+    end
+  end
+end
+~~~
+
+### Resolvers
+
+List of known resolvers for sfn-parameters:
+
+* AWS Simple Systems Manager - Parameter Store (https://github.com/novu/sfn-ssm)
 
 # Info
 
